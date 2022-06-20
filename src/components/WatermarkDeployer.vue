@@ -6,33 +6,34 @@ import { WaterMark, WaterMarkConfig } from "../types/WaterMark";
 import { Vector2 } from '../types/Vector';
 import ImagePicker from "./ImagePicker.vue";
 import SizePicker from "./SizePicker.vue";
+import ColorBlock from "./ColorBlock/index.vue";
+import { ColorOption } from "./ColorBlock/ColorOption";
 import watermark_layout_lb from '../assets/watermark_layout_lb_noborder.svg'
 import watermark_layout_lt from '../assets/watermark_layout_lt_noborder.svg'
 import watermark_layout_center from '../assets/watermark_layout_center_noborder.svg'
 import watermark_layout_rb from '../assets/watermark_layout_rb_noborder.svg'
 import watermark_layout_rt from '../assets/watermark_layout_rt_noborder.svg'
+import color_picker_img from '../assets/color_picker.svg'
 
 const props = defineProps<{
   selectedFiles: Array<File>,
   setSelectedFile: (newFiles: Array<File>) => void,
-  prevProcedure: () => void,
 }>()
 
+let pickColorMode = ref(false)
 const image_canvas = ref<HTMLCanvasElement>()
 const watermark_canvas = ref<HTMLCanvasElement>()
 const icon_picker = ref<HTMLInputElement>();
 let myImage = new Image()
 let currentFile: File
-const waterMarkConfig = reactive<WaterMarkConfig>({
-  textContent: "@arno_solo",
+const waterMark = reactive<WaterMark>(new WaterMark(watermark_canvas.value, {
+  textContent: "@your_name",
   textSize: 50,
   iconSize: 50,
   frameWidth: 5,
   opacity: 1,
   position: new Vector2(0, 0)
-})
-
-let waterMark = new WaterMark(watermark_canvas.value, waterMarkConfig)
+}))
 
 onMounted(() => {
   if (props.selectedFiles.length > 0) {
@@ -43,6 +44,9 @@ onMounted(() => {
 watch(props.selectedFiles, async (newVal, oldVal) => {
   redrawAll(newVal)
 })
+
+let textSizeMax = ref(50)
+let iconSizeMax = ref(50)
 
 async function redrawAll(newFiles: Array<File>) {
   try {
@@ -66,18 +70,25 @@ async function redrawAll(newFiles: Array<File>) {
       waterMark.canvas = watermarkLayer
 
       if (imageCtx && watermarkLayerCtx) {
-        waterMarkConfig.textSize = Math.floor(myImage.width * 0.03)
-        waterMarkConfig.iconSize = Math.floor(myImage.width * 0.03)
+        waterMark.textSize = Math.floor(myImage.width * 0.03)
+        waterMark.iconSize = Math.floor(myImage.width * 0.03)
+        textSizeMax.value = waterMark.textSize * 2
+        iconSizeMax.value = waterMark.iconSize * 2
         // waterMark.frameWidth = waterMark.textSize * 0.1
         waterMark.position.x = myImage.height * 0.5
         waterMark.position.y = myImage.width * 0.5
 
         imageCtx.drawImage(myImage, 0, 0)
         waterMark.refreshCanvas()
+        changeWatermarkLayout('center')
 
         // handleMouseDown
         watermarkLayer.addEventListener('mousedown', evt => {
           handleMouseDown(evt.clientX, evt.clientY)
+          if(pickColorMode.value) {
+            pickColorMode.value = false
+            changeWatermarkColor(colorOptions[colorOptions.length - 1])
+          }
         })
 
         watermarkLayer.addEventListener('touchend', evt => {
@@ -97,6 +108,18 @@ async function redrawAll(newFiles: Array<File>) {
         // handleMouseMove
         watermarkLayer.addEventListener('mousemove', evt => {
           handleMouseMove(evt.clientX, evt.clientY)
+          if(pickColorMode.value) {
+            let ctx = imageLayer.getContext('2d')
+            const rect = imageLayer.getBoundingClientRect()
+            let mousePos = new Vector2(
+              (evt.clientX - rect.left) * (imageLayer.width / rect.width),
+              (evt.clientY - rect.top) * (imageLayer.height / rect.height)
+            )
+            if(ctx) {
+              const colorData = ctx.getImageData(mousePos.x, mousePos.y, 1, 1).data
+              colorOptions[colorOptions.length - 1].color = `rgb(${colorData[0]}, ${colorData[1]}, ${colorData[2]})`
+            }
+          }
         })
 
         watermarkLayer.addEventListener('touchmove', evt => {
@@ -141,38 +164,6 @@ async function redrawAll(newFiles: Array<File>) {
   }
 }
 
-watch(() => waterMarkConfig.textContent, (newVal, oldVal) => {
-  if (newVal) {
-    waterMark.textContent = newVal
-  } else {
-    waterMark.textContent = ''
-  }
-})
-
-watch(() => waterMarkConfig.textSize, (newVal, oldVal) => {
-  if (newVal) {
-    waterMark.textSize = newVal
-  } else {
-    console.warn('New textSize is undefined');
-  }
-})
-
-watch(() => waterMarkConfig.textColor, (newVal, oldVal) => {
-  if (newVal) {
-    waterMark.textColor = newVal
-  } else {
-    console.warn('New textColor is undefined');
-  }
-})
-
-watch(() => waterMarkConfig.iconSize, (newVal, oldVal) => {
-  if (newVal) {
-    waterMark.iconSize = newVal
-  } else {
-    console.warn('New iconSize is undefined');
-  }
-})
-
 function selectIcon() {
   icon_picker.value?.click();
 }
@@ -211,9 +202,11 @@ function downloadImage() {
 
 interface LayoutOption {
   src: string,
-  value: string,
+  value: LayoutType,
   isActived: boolean,
 }
+type LayoutType = 'left_top' | 'left_bottom' | 'center' | 'right_top' | 'right_bottom';
+
 let layoutOptions = reactive<Array<LayoutOption>>([
   {
     src: watermark_layout_lb,
@@ -242,11 +235,10 @@ let layoutOptions = reactive<Array<LayoutOption>>([
   },
 ])
 
-function changeWatermarkLayout(layout: LayoutOption) {
-  if(!layout.isActived) {
+function changeWatermarkLayout(layoutStr: string) {
+  let layout = layoutOptions.find(opt => opt.value == layoutStr)
+  if(layout && !layout.isActived) {
     layoutOptions.forEach(opt => opt.isActived = false)
-    // const newOpt = layoutOptions.find(opt => opt.value == layout.value)
-    // if(newOpt) newOpt.isActived = true
     layout.isActived = true
     switch (layout.value) {
       case 'left_top':
@@ -287,129 +279,111 @@ function changeWatermarkLayout(layout: LayoutOption) {
   }
 }
 
-function setIconSize(newVal: string) {
-  waterMarkConfig.iconSize = Number(newVal)
-}
-
 function changeWatermarkColor(colorOpt: ColorOption) {
   if(!colorOpt.isActived) {
     colorOptions.forEach(opt => opt.isActived = false)
     colorOpt.isActived = true
-    waterMarkConfig.textColor = colorOpt.color
+    waterMark.textColor = colorOpt.color
   }
 }
 
-interface ColorOption {
-  color: string
-  borderColor: string
-  hasOutborder: boolean
-  isActived: boolean
-}
 let colorOptions = reactive<Array<ColorOption>>([
-  {
-    color: '#ffaa00',
-    borderColor: '#fff',
-    hasOutborder: false,
-    isActived: false,
-  },
-  {
+  new ColorOption({
+    color: '#ffaa00'
+  }),
+  new ColorOption({
     color: '#ffffff',
     borderColor: '#e5e7eb',
     hasOutborder: true,
     isActived: true,
-  },
-  {
+  }),
+  new ColorOption({
     color: '#555555',
-    borderColor: '#fff',
-    hasOutborder: false,
-    isActived: false,
-  },
-  {
-    color: '#1a71fc',
-    borderColor: '#fff',
-    hasOutborder: false,
-    isActived: false,
-  },
-  {
-    color: '#32c759',
-    borderColor: '#fff',
-    hasOutborder: false,
-    isActived: false,
-  },
-  {
-    color: '#fe3a30',
-    borderColor: '#fff',
-    hasOutborder: false,
-    isActived: false,
-  },
+  }),
 ])
-  
+
+function togglePickColorMode() {
+  pickColorMode.value = !pickColorMode.value
+  if(pickColorMode.value) {
+    colorOptions.push(new ColorOption({}))
+  }
+}
+
 </script>
 
 <template>
-  <div class="flex flex-wrap justify-center">
+  <div class="flex flex-wrap justify-center w-screen">
     <div class="static">
       <canvas class="w-screen sm:w-96 md:w-[30rem] border " ref="image_canvas"></canvas>
       <canvas class="w-screen sm:w-96 md:w-[30rem] border absolute top-0" ref="watermark_canvas"></canvas>
     </div>
       <!-- Control Panel -->
-      <div class="flex flex-col gap-2 p-2">
-        <ImagePicker :setSelectedFile="setSelectedFile" :selectedFiles="selectedFiles"></ImagePicker>
-        <div class="flex flex-wrap gap-1">
-          <img class="w-6" src="../assets/add_image_black.svg" @click="selectIcon" alt="icon image">
-          <input class="invisible w-0" type="file" ref="icon_picker" accept="image/*" @change="handleIconChange">
-          <input v-model="waterMarkConfig.iconSize" type="number" step="5" class="w-8">
-        </div>
-        <!-- <SizePicker :sizeNum="waterMarkConfig.iconSize" @num-change="setIconSize"></SizePicker> -->
-        <div class="flex flex-wrap gap-1">
-          <img class="w-6 p-0.5" src="../assets/input.svg" alt="text image">
-          <input v-model="waterMarkConfig.textContent" type="text" class="w-28 text-lg" placeholder="watermark">
-          <input v-model="waterMarkConfig.textSize" type="number" step="5" class="w-8">
-        </div>
-        <div class="flex align-middle gap-1">
-          <img class="w-6" src="../assets/opacity_block.svg" alt="opacity image">
-          <input v-model="waterMark.opacity" type="number" step="0.1" max="1" min="0" class="w-8">
-        </div>
+    <div class="flex flex-col gap-2 p-2 font-mono">
+      <ImagePicker :setSelectedFile="setSelectedFile" :selectedFiles="selectedFiles"></ImagePicker>
+      <div class="flex flex-wrap gap-1 items-center">
+        <img class="w-6" src="../assets/image.svg" @click="selectIcon" alt="icon image">
+        <p class="text-lg">Icon</p>
+        <img class="w-6 p-0.5 active:scale-95"  src="../assets/add.svg" @click="selectIcon">
+        <input type="range" v-model="waterMark.iconSize" class="w-36" min="10" :max="iconSizeMax" step="5"/>
+        <input  type="number" v-model="waterMark.iconSize" step="5" class="w-8">
+        <input class="invisible w-0" type="file" ref="icon_picker" accept="image/*" @change="handleIconChange">
+      </div>
+      <!-- <SizePicker :sizeNum="waterMarkConfig.iconSize" @num-change="setIconSize"></SizePicker> -->
+      <div class="flex flex-wrap gap-1">
+        <img class="w-6 p-0.5" src="../assets/input.svg" alt="text image">
+        <p class="text-lg">Text</p>
+        <input v-model="waterMark.textContent" type="text" class="w-28 text-lg" placeholder="watermark">
+        <input type="range" v-model="waterMark.textSize" class="w-36" min="10" :max="textSizeMax" step="5"/>
+        <input type="number" v-model="waterMark.textSize" step="5" class="w-8">
+      </div>
+      <div class="flex align-middle gap-1">
+        <img class="w-6" src="../assets/opacity_block.svg" alt="opacity image">
+        <p class="text-lg">Opacity</p>
+        <input type="range" v-model="waterMark.opacity" class="w-36" min="0" :max="1" step="0.1"/>
+        <input v-model="waterMark.opacity" type="number" step="0.1" max="1" min="0" class="w-8">
+      </div>
 
-        <div class="flex items-center gap-1.5">
-          <img class="w-6" src="../assets/color.svg" alt="color image">
-          <div v-for="colorOpt of colorOptions"
-            class="w-5 h-5 p-0.5 rounded-full flex"
-            @click="changeWatermarkColor(colorOpt)"
-            :class="{'border': colorOpt.hasOutborder}"
-            :style="{'background': colorOpt.color}"
-          >
-            <div class="flex-1 rounded-full"
-              :class="{'border-2': colorOpt.isActived}"
-              :style="{'border-color': colorOpt.borderColor}"
-            ></div>
-          </div>
-         
-          <input v-model="waterMarkConfig.textColor" type="string" class="w-20">
-        </div>
-
-        <div class="flex flex-wrap gap-2">
-          <img v-for="layout of layoutOptions"
-            @click="changeWatermarkLayout(layout)"
-            :key="layout.value"
-            :src="layout.src" :alt="layout.value" 
-            class="pt-1 rounded-lg border"
-            :class="{
-              'border-2': layout.isActived,
-              'border-blue-500': layout.isActived,
-              'border-gray-500': !layout.isActived,
+      <div class="flex items-center gap-1.5">
+        <img class="w-6" src="../assets/color.svg" alt="color image">
+        <ColorBlock v-for="colorOpt of colorOptions"
+          :colorOpt="colorOpt"
+          @click="changeWatermarkColor(colorOpt)"
+        ></ColorBlock>
+        <img
+          @click="togglePickColorMode"
+          class="w-6 active:scale-95 color-picker rounded-md"
+          :class="{
+            'border-blue-500': pickColorMode,
+            'border': pickColorMode
             }"
-          >
-        </div>
+          src="../assets/color_picker.svg" alt="color picker image"
+        >
+        <input v-model="waterMark.textColor" type="string" class="w-20">
+      </div>
 
-        <button @click="downloadImage" class="flex align-middle gap-1">
-          <img class="w-6 p-0.5" src="../assets/download_bold.svg" alt="download image">
+      <div class="flex flex-wrap gap-2">
+        <img v-for="layout of layoutOptions"
+          @click="changeWatermarkLayout(layout.value)"
+          :key="layout.value"
+          :src="layout.src" :alt="layout.value" 
+          class="pt-1 rounded-lg border"
+          :class="{
+            'border-2': layout.isActived,
+            'border-blue-500': layout.isActived,
+            'border-gray-500': !layout.isActived,
+          }"
+        >
+      </div>
+
+      <div class="flex flex-wrap gap-1 align-middle">
+        <img class="w-6 p-0.5" src="../assets/download_bold.svg" @click="downloadImage" alt="download image">
+        <button @click="downloadImage" class="active:scale-95">
           <p class="font-semibold text-m">Download</p>
         </button>
-
-        <div class="h-8"></div>
       </div>
+
     </div>
+  </div>
 </template>
 
 <style scoped>
@@ -423,11 +397,4 @@ input[type=number]::-webkit-outer-spin-button {
   margin: 0;
 }
 
-.primary-button:active {
-  transform: scale(0.98);
-  box-shadow: 0em 0.1em 0.3em rgba(0, 0, 0, 0.24);
-}
-/* div{
-  border-color:#ffaa00;
-} */
 </style>
