@@ -54,5 +54,4 @@ jobs:
           npm run build
           aws s3 rm s3://${{ env.STAGE_AWS_S3_BUCKET_NAME }} --recursive
           aws s3 sync dist s3://${{ env.STAGE_AWS_S3_BUCKET_NAME }}/
-          
-        # aws cloudfront create-invalidation --distribution-id ${{ secrets.AWS_STAGE_DISTRIBUTION_ID }} --paths "/*"
+          aws cloudfront create-invalidation --distribution-id ${{ secrets.AWS_STAGE_DISTRIBUTION_ID }} --paths "/*"
