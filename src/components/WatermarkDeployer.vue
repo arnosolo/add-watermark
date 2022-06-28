@@ -314,7 +314,6 @@ function togglePickColorMode() {
 <template>
   <div class="flex flex-wrap justify-center w-screen">
     <div class="static">
-      <p>Hello</p>
       <canvas class="w-screen sm:w-96 md:w-[30rem] border " ref="image_canvas"></canvas>
       <canvas class="w-screen sm:w-96 md:w-[30rem] border absolute top-0" ref="watermark_canvas"></canvas>
     </div>
