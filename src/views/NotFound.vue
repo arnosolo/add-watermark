@@ -1,6 +1,6 @@
 <template>
   <h1>Page not found</h1>
-  <p>You can choose <a @click="goHome">go home</a></p>
+  <p>You can choose <a @click="router.push('/')">go home</a></p>
 </template>
 
 <script lang="ts">
@@ -20,7 +20,7 @@ export default {
     }
 
     return {
-      goHome,
+      router,
     }
   }
 }
