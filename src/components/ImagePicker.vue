@@ -3,7 +3,6 @@ import { inject, reactive, ref } from 'vue'
 import { WatermarkProcedure } from '../types/WatermarkProcedure';
 
 const props = defineProps<{
-  // nextProcedure: () => void,
   selectedFiles: Array<File>,
   setSelectedFile: (newFiles: Array<File>) => void,
 }>()
@@ -18,9 +17,6 @@ async function handleFileChange() {
   props.setSelectedFile(files)
 }
 
-// function toNextStep() {
-//   props.nextProcedure()
-// }
 </script>
 
 <template>
